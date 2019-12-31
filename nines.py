@@ -1,4 +1,5 @@
 import random
+import itertools
 
 class Card:
     def __init__(self, suit, rank):
@@ -16,9 +17,20 @@ def make_deck():
         "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"
     ]]
 
+class Player:
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
 class Game:
-    def __init__(self):
+    def __init__(self, num_players=2):
         self.deck = sum((make_deck() for _ in range(2)), [])
+        self.players = itertools.cycle(
+            Player(f"player {i + 1}") for i in range(num_players)
+        )
+        self.player = self.players.__next__()
 
 if __name__ == "__main__":
     game = Game()
