@@ -59,7 +59,8 @@ class Player:
 
 class Game:
     def __init__(self, num_players=2):
-        self.draw_pile = sum((make_deck() for _ in range(2)), [])
+        self.deck = sum((make_deck() for _ in range(2)), [])
+        self.draw_pile = []
         self.discard_pile = []
         self.players = [Player(f"player {i + 1}") for i in range(num_players)]
 
@@ -71,7 +72,8 @@ class Game:
 
     def run(self):
         # TODO: Put all cards in draw pile
-        random.shuffle(self.draw_pile)
+        random.shuffle(self.deck)
+        self.draw_pile = [card for card in self.deck]
         self.discard_pile.append(self.draw_pile.pop())
         self.draw_hands()
         for player in self.players:
@@ -145,6 +147,10 @@ class Game:
             else:
                 self.discard_pile.append(new_card)
                 print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
+            for column in player.hand:
+                if all(card.face_up and card.rank == column[0].rank
+                       for card in column):
+                    player.hand.remove(column)
             player.print_hand()
             print()
 
