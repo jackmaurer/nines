@@ -3,11 +3,10 @@ import itertools
 import statistics
 
 def maxima(iterable, key=None):
-    max_items = []
     max_value = None
     for item in iterable:
         value = key(item) if key else item
-        if value > max_value:
+        if max_value is None or value > max_value:
             max_items = [item]
             max_value = value
         elif value == max_value:
@@ -119,9 +118,7 @@ class Player:
             )
         elif cue == self.game.PLACE_COLUMN:
             new_card = args[0]
-            num_columns = len(self.hand)
-            if (num_columns == 1): return 0
-            print(f"In which column (1-{num_columns}) do you"
+            print(f"In which column (1-{len(self.hand)}) do you"
                   f" want to place your {new_card.rank.upper()}?")
             return self.get_user_input(
                 filter_fn=lambda s: int(s) - 1,
@@ -205,22 +202,26 @@ class AIPlayer(Player):
             return self.choose_row(new_card, column)
 
     def wants_card(self, new_card, from_discard=True):
-        # TODO: Take into account if the only card we want to replace
-        # with this one is the last face-down card
-        if self.has_two_in_column(new_card.rank):
-            return (True, self.HAS_TWO_IN_COLUMN)
+        number_face_down = sum(
+            not card.face_up for column in self.hand for card in column
+        )
+        columns_with_two = self.columns_with_two(new_card.rank)
+        if columns_with_two:
+            # TODO: Take into account whether another player has gone out
+            if number_face_down > 1 or any(
+                all(card.face_up for card in self.hand[i])
+                for i in columns_with_two
+            ):
+                return (True, self.HAS_TWO_IN_COLUMN)
         new_card_value = self.game.point_values[new_card.rank]
         if from_discard and new_card_value > self.mean_value:
             # The draw pile will always be a better bet in this case
             return (False, self.TOO_HIGH)
-        number_face_down = sum(
-            not card.face_up for column in self.hand for card in column
-        )
         for column in self.hand:
             column_ranks = [card.rank for card in column]
             for card in column:
                 if number_face_down == 1 and not card.face_up: continue
-                if (column_ranks.count(card.rank) < 2
+                if ((not card.face_up or column_ranks.count(card.rank) < 2)
                         and self.expected_value(card.rank) > new_card_value):
                     return (True, self.LOW_ENOUGH)
         return (False, self.TOO_HIGH)
@@ -232,13 +233,20 @@ class AIPlayer(Player):
     def choose_column(self, new_card):
         # 1. columns with two cards of the same rank as new_card
         #    a. column with highest expected value
-        columns_with_two = self.columns_with_two(new_card.rank)
-        if columns_with_two: return self.max_column(columns_with_two)
-        # 2. columns with at least one card that has a higher value
-        #    than new_card
         number_face_down = sum(
             not card.face_up for column in self.hand for card in column
         )
+        columns_with_two = self.columns_with_two(new_card.rank)
+        if columns_with_two:
+            # TODO: Take into account whether another player has gone out
+            if number_face_down == 1:
+                columns = [i for i in columns_with_two
+                           if all(card.face_up for card in self.hand[i])]
+                if columns: return self.max_column(columns)
+            else:
+                return self.max_column(columns_with_two)
+        # 2. columns with at least one card that has a higher value
+        #    than new_card
         new_card_value = self.game.point_values[new_card.rank]
         columns = []
         for (i, column) in enumerate(self.hand):
@@ -275,16 +283,24 @@ class AIPlayer(Player):
                 (i, column) for (i, column) in columns
                 if self.column_toak(column) is None
             ] or columns
-        return max(
-            columns,
-            key=lambda pair: max(self.expected_value(card.rank)
-                                 for card in pair[1])
+        return min(
+            maxima(
+                columns,
+                key=lambda pair: max(self.expected_value(card.rank)
+                                     for card in pair[1])
+            ),
+            key=lambda pair: sum(card.face_up for card in pair[1])
         )[0]
 
     def choose_row(self, new_card, column):
+        number_face_down = sum(
+            not card.face_up for column in self.hand for card in column
+        )  # TODO: Make this a method
+        # TODO: .is_last_face_down(card)
         return max(
             ((i, card) for (i, card) in enumerate(self.hand[column])
-             if card.rank != new_card.rank),
+             if card.rank != new_card.rank and (card.face_up
+                                                or number_face_down > 1)),
             key=lambda pair: self.expected_value(pair[1].rank)
         )[0]
 
@@ -366,6 +382,7 @@ class Game:
         self.draw_pile = []
         self.discard_pile = []
         self.players = [
+            # Player(self, "human"),
             AIPlayer(self, "computer 1"),
             AIPlayer(self, "computer 2")
         ] if players is None else players
@@ -424,7 +441,9 @@ class Game:
                       " from the discard pile")
                 action2 = "keep"
             if action2 == "keep":
-                column = player.get_input(self.PLACE_COLUMN, new_card)
+                column = 0 if len(player.hand) == 1 else player.get_input(
+                    self.PLACE_COLUMN, new_card
+                )
                 row = player.get_input(self.PLACE_ROW, new_card, column)
                 old_card = player.hand[column][row]
                 old_card.face_up = True
