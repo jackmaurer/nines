@@ -99,7 +99,6 @@ class Player:
             )
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
-            print(f"You have a {new_card.rank.upper()}.")
             print("Do you want to KEEP or DISCARD your"
                   f" {new_card.rank.upper()}?")
             return self.get_user_input(
@@ -108,7 +107,9 @@ class Player:
             )
         elif cue == self.game.PLACE_COLUMN:
             new_card = args[0]
-            print(f"In which column (1-{len(self.hand)}) do you"
+            num_columns = len(self.hand)
+            if (num_columns == 1): return 0
+            print(f"In which column (1-{num_columns}) do you"
                   f" want to place your {new_card.rank.upper()}?")
             return self.get_user_input(
                 filter_fn=lambda s: int(s) - 1,
@@ -186,7 +187,9 @@ class PrudentAI(Player):
                     return row
         elif cue == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
-            if self.game.point_values[discard.rank] < self.mean_value:
+            # TODO
+            if (self.game.point_values[discard.rank] < self.mean_value
+                and self.has_column_without_toak()):
                 return "discard"
             elif self.has_two_in_column(discard.rank):
                 return "discard"
@@ -196,7 +199,10 @@ class PrudentAI(Player):
             return "draw"
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
-            if self.game.point_values[new_card.rank] < self.mean_value:
+            # TODO: Change order of conditional blocks for consistency
+            # with placement code
+            if (self.game.point_values[new_card.rank] < self.mean_value
+                and self.has_column_without_toak()):
                 print(f"-This {new_card.rank.upper()} is only worth"
                       f" {self.game.point_values[new_card.rank]} points,"
                       " so I'm going to keep it.")
@@ -219,6 +225,7 @@ class PrudentAI(Player):
             columns_with_two = self.columns_with_two(new_card.rank)
             if columns_with_two:
                 return self.max_column(columns_with_two)
+            columns_without_toak = self.columns_without_toak()
             columns_where_min = self.columns_where_min_without_toak(
                 new_card.rank
             )
@@ -227,9 +234,21 @@ class PrudentAI(Player):
             return self.column_with_max_without_toak()
         elif cue == self.game.PLACE_ROW:
             new_card, column = args
+            return random.randrange(3)
             for (i, card) in enumerate(self.hand[column]):
                 if not card.face_up:
                     return i
+
+    def has_column_without_toak(self):
+        for column in self.hand:
+            if not self.column_has_toak(column): return True
+
+    def column_has_toak(self, column):
+        column_ranks = []
+        for card in column:
+            if not card.face_up: continue
+            if card.rank in column_ranks: return True
+            column_ranks.append(card.rank)
 
     def has_two_in_column(self, rank):
         for column in self.hand:
@@ -249,15 +268,8 @@ class PrudentAI(Player):
 
     # TODO: Only call this at most once per get_input call
     def columns_without_toak(self):
-        columns = []
-        for (i, column) in enumerate(self.hand):
-            column_ranks = []
-            for card in column:
-                if card.rank in column_ranks:
-                    break
-            else:
-                columns.append(i)
-        return columns
+        return [i for (i, column) in enumerate(self.hand)
+                if not self.column_has_toak(column)]
             
 
     def opponents_max_turned_over(self):
@@ -396,8 +408,11 @@ class Game:
                         "discard": self.discard_pile}[action1].pop()
             new_card.face_up = True
             if action1 == "draw":
+                print(f"{player.name.upper()} drew a {new_card.rank.upper()}")
                 action2 = player.get_input(self.KEEP_OR_DISCARD, new_card)
             else:
+                print(f"{player.name.upper()} took a {new_card.rank.upper()}"
+                      " from the discard pile")
                 action2 = "keep"
             if action2 == "keep":
                 column = player.get_input(self.PLACE_COLUMN, new_card)
