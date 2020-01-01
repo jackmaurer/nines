@@ -188,12 +188,6 @@ class Game:
             print()
         self.print_results()
 
-    def get_input(self, prompt="> ", validator=lambda s: True):
-        while 1:
-            s = input(prompt)
-            if validator(s):
-                return s
-
     def get_input(self, prompt="> ",
                   filter_fn=None,
                   validator=None):
