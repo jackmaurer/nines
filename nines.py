@@ -57,12 +57,32 @@ class Player:
             for line in lines:
                 print(" ".join(line))
 
+    def score(self):
+        point_values = {
+            "ace":  1,
+            "king": 0,
+            "queen": 10,
+            "jack": 10,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10
+        }
+        return sum(point_values[card.rank] for column in self.hand
+                   for card in column)
+
 class Game:
     def __init__(self, num_players=2):
         self.deck = sum((make_deck() for _ in range(2)), [])
         self.draw_pile = []
         self.discard_pile = []
         self.players = [Player(f"player {i + 1}") for i in range(num_players)]
+        self.out_player = None
 
     def draw_hands(self):
         for player in self.players:
@@ -71,18 +91,19 @@ class Game:
             ]
 
     def run(self):
-        # TODO: Put all cards in draw pile
+        # TODO: Empty hands at end of game?
         random.shuffle(self.deck)
         self.draw_pile = [card for card in self.deck]
         self.discard_pile.append(self.draw_pile.pop())
         self.draw_hands()
+        self.out_player = None
         for player in self.players:
             s = f"{player.name}'s turn"
             print(s)
             print("=" * len(s))
             input("Press ENTER to continue.")
             player.print_hand()
-            for _ in range(2):
+            for _ in range(9):
                 print("In which column (1-3) do you"
                       " want to turn over a card?")
                 column = self.get_input(
@@ -103,6 +124,8 @@ class Game:
                 player.print_hand()
                 print()
         for player in itertools.cycle(self.players):
+            if player is self.out_player:
+                break
             s = f"{player.name}'s turn"
             print(s)
             print("=" * len(s))
@@ -151,8 +174,19 @@ class Game:
                 if all(card.face_up and card.rank == column[0].rank
                        for card in column):
                     player.hand.remove(column)
+            if self.out_player:
+                for column in player.hand:
+                    for card in column:
+                        card.face_up = True
+            else:
+                if all(card.face_up for column in player.hand
+                       for card in column):
+                    print(f"{player.name} went out with"
+                          f" {player.score()} points!")
+                    self.out_player = player
             player.print_hand()
             print()
+        self.print_results()
 
     def get_input(self, prompt="> ", validator=lambda s: True):
         while 1:
@@ -172,6 +206,19 @@ class Game:
                 pass
             else:
                 if validator(s): return s
+
+    def print_results(self):
+        results = [(player, player.score()) for player in self.players]
+        results.sort(key=lambda pair: pair[1])
+        name_width = max(
+            4, *(len(player.name) for player in self.players)
+        )
+        s = f"Rank  {'Name'.ljust(name_width)}  Score"
+        print(s)
+        print("=" * len(s))
+        for (i, (player, score)) in enumerate(results):
+            print(f"{str(i + 1).ljust(4)}"
+                  f"  {player.name.ljust(name_width)}  {score}")
 
 if __name__ == "__main__":
     game = Game()
