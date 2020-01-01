@@ -103,7 +103,7 @@ class Game:
             print("=" * len(s))
             input("Press ENTER to continue.")
             player.print_hand()
-            for _ in range(9):
+            for _ in range(2):
                 print("In which column (1-3) do you"
                       " want to turn over a card?")
                 column = self.get_input(
@@ -200,12 +200,12 @@ class Game:
         # TODO: Use None instead of useless functions
         while 1:
             s = input(prompt)
-            try:
-                s = filter_fn(s)
-            except ValueError:
-                pass
-            else:
-                if validator(s): return s
+            if filter_fn is not None:
+                try:
+                    s = filter_fn(s)
+                except ValueError:
+                    continue
+            if validator is None or validator(s): return s
 
     def print_results(self):
         results = [(player, player.score()) for player in self.players]
