@@ -88,6 +88,14 @@ class Player:
                     continue
             if validator is None or validator(s): return s
 
+# Game needs to pass state cues to the player with each request for
+# input so that if it's a Player, it can print input instructions for
+# the user, and if it's an AIPlayer, it can generate its own input.
+class AIPlayer(Player):
+    def __init__(self, name):
+        Player.__init__(self, name)
+        
+
 class Game:
     def __init__(self, num_players=2):
         self.deck = sum((make_deck() for _ in range(2)), [])
