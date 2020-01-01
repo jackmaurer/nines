@@ -195,9 +195,8 @@ class Game:
                 return s
 
     def get_input(self, prompt="> ",
-                  filter_fn=lambda s: s,
-                  validator=lambda s: True):
-        # TODO: Use None instead of useless functions
+                  filter_fn=None,
+                  validator=None):
         while 1:
             s = input(prompt)
             if filter_fn is not None:
