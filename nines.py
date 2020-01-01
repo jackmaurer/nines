@@ -121,22 +121,23 @@ class Game:
             print("Do you want to take a card from the DRAW pile"
                   " or the DISCARD pile?")
             while 1:
-                action = input("> ").strip().lower()
-                if action in ["draw", "discard"]:
+                action1 = input("> ").strip().lower()
+                if action1 in ["draw", "discard"]:
                     break
             new_card = {"draw": self.draw_pile,
-                        "discard": self.discard_pile}[action].pop()
+                        "discard": self.discard_pile}[action1].pop()
             new_card.face_up = True
-            # TODO: If you take a card from the discard pile, you should
-            # only be allowed to keep it
             print(f"You have a {new_card.rank.upper()}.")
-            print("Do you want to KEEP or DISCARD your"
-                  f" {new_card.rank.upper()}?")
-            while 1:
-                action = input("> ").strip().lower()
-                if action in ["keep", "discard"]:
-                    break
-            if action == "keep":
+            if action1 == "draw":
+                print("Do you want to KEEP or DISCARD your"
+                      f" {new_card.rank.upper()}?")
+                while 1:
+                    action2 = input("> ").strip().lower()
+                    if action2 in ["keep", "discard"]:
+                        break
+            else:
+                action2 = "keep"
+            if action2 == "keep":
                 print(f"In which column (1-{len(player.hand)}) do you"
                       f" want to place your {new_card.rank.upper()}?")
                 while 1:
