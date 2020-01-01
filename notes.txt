@@ -27,4 +27,10 @@ COMPUTER 2 discarded a SEVEN
 Should have put four in first column?
 
 
-any
+TODO:
+    any
+    Figure out and store row and column when choosing to keep a card
+        Move class
+    Go out if:
+        Someone else has already gone out
+        We will definitely have fewer points than everyone else

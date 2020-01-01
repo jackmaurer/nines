@@ -156,12 +156,11 @@ class AIPlayer(Player):
 
     def get_input(self, cue, *args):
         if cue == self.game.TURN_OVER_COLUMN:
-            return 0
+            for column in range(3):
+                if not self.hand[column][0].face_up:
+                    return column
         elif cue == self.game.TURN_OVER_ROW:
-            column = args[0]
-            for row in range(3):
-                if not self.hand[column][row].face_up:
-                    return row
+            return 0
         elif cue == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
             wanted, reason = self.wants_card(discard)
