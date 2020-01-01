@@ -1,5 +1,6 @@
 import random
 import itertools
+import statistics
 
 class Card:
     def __init__(self, suit, rank, face_up=False):
@@ -136,6 +137,10 @@ class Player:
 
 
 class ImpatientAI(Player):
+    def __init__(self, game, name):
+        Player.__init__(self, game, name)
+        self.mean_value = statistics.mean(game.point_values.values())
+        
     def get_input(self, cue, *args):
         if cue == self.game.TURN_OVER_COLUMN:
             return 0
@@ -146,12 +151,12 @@ class ImpatientAI(Player):
                     return row
         elif cue == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
-            if self.game.point_values[discard.rank] < 6:
+            if self.game.point_values[discard.rank] < self.mean_value:
                 return "discard"
             return "draw"
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
-            if self.game.point_values[new_card.rank] < 6:
+            if self.game.point_values[new_card.rank] < self.mean_value:
                 return "keep"
             return "discard"
         elif cue == self.game.PLACE_COLUMN:
@@ -164,6 +169,151 @@ class ImpatientAI(Player):
             for (i, card) in enumerate(self.hand[column]):
                 if not card.face_up:
                     return i
+
+
+class PrudentAI(Player):
+    def __init__(self, game, name):
+        Player.__init__(self, game, name)
+        self.mean_value = statistics.mean(game.point_values.values())
+        
+    def get_input(self, cue, *args):
+        if cue == self.game.TURN_OVER_COLUMN:
+            return 0
+        elif cue == self.game.TURN_OVER_ROW:
+            column = args[0]
+            for row in range(3):
+                if not self.hand[column][row].face_up:
+                    return row
+        elif cue == self.game.DRAW_OR_DISCARD:
+            discard = self.game.discard_pile[-1]
+            if self.game.point_values[discard.rank] < self.mean_value:
+                return "discard"
+            elif self.has_two_in_column(discard.rank):
+                return "discard"
+            elif (self.is_min_in_column_without_toak(discard.rank)
+                  and self.opponents_max_turned_over() < 5):
+                return "discard"
+            return "draw"
+        elif cue == self.game.KEEP_OR_DISCARD:
+            new_card = args[0]
+            if self.game.point_values[new_card.rank] < self.mean_value:
+                print(f"-This {new_card.rank.upper()} is only worth"
+                      f" {self.game.point_values[new_card.rank]} points,"
+                      " so I'm going to keep it.")
+                return "keep"
+            elif self.has_two_in_column(new_card.rank):
+                print(f"-I've already got a couple of {new_card.rank.upper()}"
+                      " cards in one column, so I'm going to keep this one.")
+                return "keep"
+            elif (self.is_min_in_column_without_toak(new_card.rank)
+                  and self.opponents_max_turned_over() < 5):
+                print("-It doesn't look like anyone's in danger of going"
+                      " out anytime soon, so I'm going to take this"
+                      f" {new_card.rank.upper()} and hope a couple more"
+                      " come my way.")
+                return "keep"
+            print(f"-I don't want this {new_card.rank.upper()}.")
+            return "discard"
+        elif cue == self.game.PLACE_COLUMN:
+            new_card = args[0]
+            columns_with_two = self.columns_with_two(new_card.rank)
+            if columns_with_two:
+                return self.max_column(columns_with_two)
+            columns_where_min = self.columns_where_min_without_toak(
+                new_card.rank
+            )
+            if columns_where_min:
+                return self.max_column(columns_where_min)
+            return self.column_with_max_without_toak()
+        elif cue == self.game.PLACE_ROW:
+            new_card, column = args
+            for (i, card) in enumerate(self.hand[column]):
+                if not card.face_up:
+                    return i
+
+    def has_two_in_column(self, rank):
+        for column in self.hand:
+            n = 0
+            for card in column:
+                if card.rank == rank:
+                    n += 1
+                    if n == 2:
+                        return True
+
+    def is_min_in_column_without_toak(self, rank):
+        for i in self.columns_without_toak():
+            column = self.hand[i]
+            if rank == min((card.rank for card in column),
+                           key=self.expected_value):
+                return True
+
+    # TODO: Only call this at most once per get_input call
+    def columns_without_toak(self):
+        columns = []
+        for (i, column) in enumerate(self.hand):
+            column_ranks = []
+            for card in column:
+                if card.rank in column_ranks:
+                    break
+            else:
+                columns.append(i)
+        return columns
+            
+
+    def opponents_max_turned_over(self):
+        return max(
+            sum(card.face_up for column in player.hand for card in column)
+            for player in self.game.players if player is not self
+        )
+
+    def columns_with_two(self, rank):
+        columns = []
+        for (i, column) in enumerate(self.hand):
+            n = 0;
+            for card in column:
+                if card.rank == rank:
+                    n += 1
+                    if n == 2:
+                        columns.append(i)
+                        break
+        return columns
+
+    def columns_where_min_without_toak(self, rank):
+        columns = []
+        for i in self.columns_without_toak():
+            column = self.hand[i]
+            if rank == min((card.rank for card in column),
+                           key=self.expected_value):
+                columns.append(i)
+        return columns
+
+    def column_with_max_without_toak(self):
+        max_index = 0
+        max_value = 0
+        for i in self.columns_without_toak():
+            column = self.hand[i]
+            ooak_ranks = []
+            for card in column:
+                # depends on there not being more than two of a kind in
+                # a column
+                if card.rank in ooak_ranks:
+                    ooak_ranks.remove(card.rank)
+                else:
+                    ooak_ranks.append(card.rank)
+            column_max = max(map(self.expected_value, ooak_ranks))
+            if column_max > max_value:
+                max_index = i
+                max_value = column_max
+        return max_index
+
+    def expected_value(self, rank):
+        return (self.mean_value if rank is None
+                else self.game.point_values[rank])
+
+    def max_column(self, columns):
+        return max(columns, key=lambda i: sum(
+            self.expected_value(card.rank) for card in self.hand[i]
+        ))
 
 
 class Game:
@@ -196,7 +346,7 @@ class Game:
         self.discard_pile = []
         self.players = [
             Player(self, "human"),
-            ImpatientAI(self, "computer")
+            PrudentAI(self, "computer")
         ] if players is None else players
 
     def draw_hands(self):
@@ -218,7 +368,7 @@ class Game:
         self.draw_hands()
         self.out_player = None
         for player in self.players:
-            s = f"{player.name}'s turn"
+            s = f"{player.name.upper()}'s turn"
             print(s)
             print("=" * len(s))
             input("Press ENTER to continue.")
@@ -228,13 +378,14 @@ class Game:
                 row = player.get_input(self.TURN_OVER_ROW, column)
                 card = player.hand[column][row]
                 card.face_up = True
-                print(f"{player.name} turned over a {card.rank.upper()}.")
+                print(f"{player.name.upper()} turned over a"
+                      f" {card.rank.upper()}.")
                 player.print_hand()
                 print()
         for player in itertools.cycle(self.players):
             if player is self.out_player:
                 break
-            s = f"{player.name}'s turn"
+            s = f"{player.name.upper()}'s turn"
             print(s)
             print("=" * len(s))
             input("Press ENTER to continue.")
@@ -257,7 +408,7 @@ class Game:
                 player.hand[column][row] = new_card
             else:
                 self.discard_pile.append(new_card)
-            print(f"{player.name} discarded a"
+            print(f"{player.name.upper()} discarded a"
                   f" {self.discard_pile[-1].rank.upper()}")
             for column in player.hand:
                 if all(card.face_up and card.rank == column[0].rank
@@ -270,7 +421,7 @@ class Game:
             else:
                 if all(card.face_up for column in player.hand
                        for card in column):
-                    print(f"{player.name} went out with"
+                    print(f"{player.name.upper()} went out with"
                           f" {player.score()} points!")
                     self.out_player = player
             player.print_hand()
