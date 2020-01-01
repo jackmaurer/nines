@@ -76,6 +76,18 @@ class Player:
         return sum(point_values[card.rank] for column in self.hand
                    for card in column)
 
+    def get_input(self, prompt="> ",
+                  filter_fn=None,
+                  validator=None):
+        while 1:
+            s = input(prompt)
+            if filter_fn is not None:
+                try:
+                    s = filter_fn(s)
+                except ValueError:
+                    continue
+            if validator is None or validator(s): return s
+
 class Game:
     def __init__(self, num_players=2):
         self.deck = sum((make_deck() for _ in range(2)), [])
@@ -106,13 +118,13 @@ class Game:
             for _ in range(2):
                 print("In which column (1-3) do you"
                       " want to turn over a card?")
-                column = self.get_input(
+                column = player.get_input(
                     filter_fn=lambda s: int(s) - 1,
                     validator=lambda x: 0 <= x <= 2
                 )
                 print("In which row (1-3) do you want to"
                       " turn over a card?")
-                row = self.get_input(
+                row = player.get_input(
                     filter_fn=lambda s: int(s) - 1,
                     validator=lambda x: (
                         0 <= x <= 2 and not player.hand[column][x].face_up
@@ -134,7 +146,7 @@ class Game:
             player.print_hand()
             print("Do you want to take a card from the DRAW pile"
                   " or the DISCARD pile?")
-            action1 = self.get_input(
+            action1 = player.get_input(
                 filter_fn=lambda s: s.strip().lower(),
                 validator=lambda s: s in ["draw", "discard"]
             )
@@ -145,7 +157,7 @@ class Game:
             if action1 == "draw":
                 print("Do you want to KEEP or DISCARD your"
                       f" {new_card.rank.upper()}?")
-                action2 = self.get_input(
+                action2 = player.get_input(
                     filter_fn=lambda s: s.strip().lower(),
                     validator=lambda s: s in ["keep", "discard"]
                 )
@@ -154,13 +166,13 @@ class Game:
             if action2 == "keep":
                 print(f"In which column (1-{len(player.hand)}) do you"
                       f" want to place your {new_card.rank.upper()}?")
-                column = self.get_input(
+                column = player.get_input(
                     filter_fn=lambda s: int(s) - 1,
                     validator=lambda x: 0 <= x <= 2
                 )
                 print("In which row (1-3) do you want to"
                       f" place your {new_card.rank.upper()}?")
-                row = self.get_input(
+                row = player.get_input(
                     filter_fn=lambda s: int(s) - 1,
                     validator=lambda x: 0 <= x <= 2
                 )
@@ -187,18 +199,6 @@ class Game:
             player.print_hand()
             print()
         self.print_results()
-
-    def get_input(self, prompt="> ",
-                  filter_fn=None,
-                  validator=None):
-        while 1:
-            s = input(prompt)
-            if filter_fn is not None:
-                try:
-                    s = filter_fn(s)
-                except ValueError:
-                    continue
-            if validator is None or validator(s): return s
 
     def print_results(self):
         results = [(player, player.score()) for player in self.players]
