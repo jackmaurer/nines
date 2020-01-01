@@ -219,7 +219,7 @@ class PrudentAI(Player):
             return "discard" if wanted else "draw"
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
-            wanted, reason = self.wants_card(new_card)
+            wanted, reason = self.wants_card(new_card, from_discard=False)
             rank_upper = new_card.rank.upper()
             if reason == self.HAS_TWO_IN_COLUMN:
                 print(f"-I already have two {rank_upper} cards in a"
@@ -240,13 +240,13 @@ class PrudentAI(Player):
             new_card, column = args
             return self.choose_row(new_card, column)
 
-    def wants_card(self, new_card):
+    def wants_card(self, new_card, from_discard=True):
         # TODO: Take into account if the only card we want to replace
         # with this one is the last face-down card
         if self.has_two_in_column(new_card.rank):
             return (True, self.HAS_TWO_IN_COLUMN)
         new_card_value = self.game.point_values[new_card.rank]
-        if new_card_value > self.mean_value:
+        if from_discard and new_card_value > self.mean_value:
             # The draw pile will always be a better bet in this case
             return (False, self.TOO_HIGH)
         number_face_down = sum(
@@ -261,9 +261,6 @@ class PrudentAI(Player):
                     return (True, self.LOW_ENOUGH)
         return (False, self.TOO_HIGH)
 
-    # TODO: Prefer to put card in column where there is already a
-    # face-up card of the same rank or where all cards are face-down.
-
     # TODO: If all rows have two of a kind, and more than one card
     # remains face-down, consider taking a card even if it will not
     # make three of a kind.
@@ -271,11 +268,21 @@ class PrudentAI(Player):
     def choose_column(self, new_card):
         columns_with_two = self.columns_with_two(new_card.rank)
         if columns_with_two: return self.max_column(columns_with_two)
-        return max(
+        columns = maxima(
             self.columns_without_toak(),
             key=lambda i: max(self.expected_value(card.rank)
                               for card in self.hand[i])
         )
+        # Prefer column where there is already a card of the same rank
+        for i in columns:
+            for card in self.hand[i]:
+                if card.rank == new_card.rank:
+                    return i
+        # Alternatively, prefer column where all cards are face-down
+        for i in columns:
+            if all(not card.face_up for card in self.hand[i]):
+                return i
+        return columns[0]
 
     def choose_row(self, new_card, column):
         return max(
