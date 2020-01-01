@@ -60,22 +60,8 @@ class Player:
                 print(" ".join(line))
 
     def score(self):
-        point_values = {
-            "ace":  1,
-            "king": 0,
-            "queen": 10,
-            "jack": 10,
-            "two": 2,
-            "three": 3,
-            "four": 4,
-            "five": 5,
-            "six": 6,
-            "seven": 7,
-            "eight": 8,
-            "nine": 9,
-            "ten": 10
-        }
-        return sum(point_values[card.rank] for column in self.hand
+        return sum(self.game.point_values[card.rank]
+                   for column in self.hand
                    for card in column)
 
     def get_input(self, cue, *args):
@@ -105,6 +91,7 @@ class Player:
             )
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
+            print(f"You have a {new_card.rank.upper()}.")
             print("Do you want to KEEP or DISCARD your"
                   f" {new_card.rank.upper()}?")
             return self.get_user_input(
@@ -141,9 +128,38 @@ class Player:
             if validator is None or validator(s): return s
 
 
-class AIPlayer(Player):
+class ImpatientAI(Player):
     def __init__(self, game, name):
         Player.__init__(self, game, name)
+
+    def get_input(self, cue, *args):
+        if cue == self.game.TURN_OVER_COLUMN:
+            return 0
+        elif cue == self.game.TURN_OVER_ROW:
+            column = args[0]
+            for row in range(3):
+                if not self.hand[column][row].face_up:
+                    return row
+        elif cue == self.game.DRAW_OR_DISCARD:
+            discard = self.game.discard_pile[-1]
+            if self.game.point_values[discard.rank] < 6:
+                return "discard"
+            return "draw"
+        elif cue == self.game.KEEP_OR_DISCARD:
+            new_card = args[0]
+            if self.game.point_values[new_card.rank] < 6:
+                return "keep"
+            return "discard"
+        elif cue == self.game.PLACE_COLUMN:
+            new_card = args[0]
+            for (i, column) in enumerate(self.hand):
+                if not all(card.face_up for card in column):
+                    return i
+        elif cue == self.game.PLACE_ROW:
+            new_card, column = args
+            for (i, card) in enumerate(self.hand[column]):
+                if not card.face_up:
+                    return i
 
 
 class Game:
@@ -154,14 +170,30 @@ class Game:
     PLACE_COLUMN = 4
     PLACE_ROW = 5
 
-    def __init__(self, num_players=2):
+    point_values = {
+        "ace":  1,
+        "king": 0,
+        "queen": 10,
+        "jack": 10,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10
+    }
+
+    def __init__(self, players=None):
         self.deck = sum((make_deck() for _ in range(2)), [])
         self.draw_pile = []
         self.discard_pile = []
         self.players = [
-            Player(self, f"player {i + 1}") for i in range(num_players)
-        ]
-        self.out_player = None
+            Player(self, "human"),
+            ImpatientAI(self, "computer")
+        ] if players is None else players
 
     def draw_hands(self):
         for player in self.players:
@@ -187,7 +219,7 @@ class Game:
                 row = player.get_input(self.TURN_OVER_ROW, column)
                 card = player.hand[column][row]
                 card.face_up = True
-                print(f"You turned over a {card.rank.upper()}.")
+                print(f"{player.name} turned over a {card.rank.upper()}.")
                 player.print_hand()
                 print()
         for player in itertools.cycle(self.players):
@@ -203,7 +235,6 @@ class Game:
             new_card = {"draw": self.draw_pile,
                         "discard": self.discard_pile}[action1].pop()
             new_card.face_up = True
-            print(f"You have a {new_card.rank.upper()}.")
             if action1 == "draw":
                 action2 = player.get_input(self.KEEP_OR_DISCARD, new_card)
             else:
@@ -213,10 +244,10 @@ class Game:
                 row = player.get_input(self.PLACE_ROW, new_card, column)
                 self.discard_pile.append(player.hand[column][row])
                 player.hand[column][row] = new_card
-                print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
             else:
                 self.discard_pile.append(new_card)
-                print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
+            print(f"{player.name} discarded a"
+                  f" {self.discard_pile[-1].rank.upper()}")
             for column in player.hand:
                 if all(card.face_up and card.rank == column[0].rank
                        for card in column):
