@@ -148,43 +148,7 @@ class Player:
                     continue
             if validator is None or validator(s): return s
 
-
-class ImpatientAI(Player):
-    def __init__(self, game, name):
-        Player.__init__(self, game, name)
-        self.mean_value = statistics.mean(game.point_values.values())
-
-    def get_input(self, cue, *args):
-        if cue == self.game.TURN_OVER_COLUMN:
-            return 0
-        elif cue == self.game.TURN_OVER_ROW:
-            column = args[0]
-            for row in range(3):
-                if not self.hand[column][row].face_up:
-                    return row
-        elif cue == self.game.DRAW_OR_DISCARD:
-            discard = self.game.discard_pile[-1]
-            if self.game.point_values[discard.rank] < self.mean_value:
-                return "discard"
-            return "draw"
-        elif cue == self.game.KEEP_OR_DISCARD:
-            new_card = args[0]
-            if self.game.point_values[new_card.rank] < self.mean_value:
-                return "keep"
-            return "discard"
-        elif cue == self.game.PLACE_COLUMN:
-            new_card = args[0]
-            for (i, column) in enumerate(self.hand):
-                if not all(card.face_up for card in column):
-                    return i
-        elif cue == self.game.PLACE_ROW:
-            new_card, column = args
-            for (i, card) in enumerate(self.hand[column]):
-                if not card.face_up:
-                    return i
-
-
-class PrudentAI(Player):
+class AIPlayer(Player):
     HAS_TWO_IN_COLUMN = 0
     LOW_ENOUGH = 1
     TOO_HIGH = 2
@@ -266,23 +230,56 @@ class PrudentAI(Player):
     # make three of a kind.
 
     def choose_column(self, new_card):
+        # 1. columns with two cards of the same rank as new_card
+        #    a. column with highest expected value
         columns_with_two = self.columns_with_two(new_card.rank)
         if columns_with_two: return self.max_column(columns_with_two)
-        columns = maxima(
-            self.columns_without_toak(),
-            key=lambda i: max(self.expected_value(card.rank)
-                              for card in self.hand[i])
+        # 2. columns with at least one card that has a higher value
+        #    than new_card
+        number_face_down = sum(
+            not card.face_up for column in self.hand for card in column
         )
-        # Prefer column where there is already a card of the same rank
-        for i in columns:
-            for card in self.hand[i]:
+        new_card_value = self.game.point_values[new_card.rank]
+        columns = []
+        for (i, column) in enumerate(self.hand):
+            for card in column:
+                if number_face_down == 1 and not card.face_up: continue
+                if self.expected_value(card.rank) > new_card_value:
+                    columns.append((i, column))
+                    break
+        #    a. columns with one card of the same rank as new_card
+        columns_with_same_rank = []
+        for (i, column) in columns:
+            for card in column:
                 if card.rank == new_card.rank:
-                    return i
-        # Alternatively, prefer column where all cards are face-down
-        for i in columns:
-            if all(not card.face_up for card in self.hand[i]):
-                return i
-        return columns[0]
+                    columns_with_same_rank.append((i, column))
+                    break
+        #       i.  columns that do not have two of a kind
+        #       ii. columns that have two of a kind that have a higher
+        #           value than new_card
+        if columns_with_same_rank:
+            columns_toak = [self.column_toak(column)
+                            for (i, column) in columns_with_same_rank]
+            columns = [
+                pair for (i, pair) in enumerate(
+                    columns_with_same_rank
+                ) if columns_toak[i] is None
+            ] or [
+                pair for (i, pair) in enumerate(
+                    columns_with_same_rank
+                ) if self.game.point_values[columns_toak[i]] > new_card_value
+            ] or columns
+        #    b. columns without two of a kind
+        else:
+            columns = [
+                (i, column) for (i, column) in columns
+                if self.column_toak(column) is None
+            ] or columns
+        return max(
+            columns,
+            key=lambda pair: max(self.expected_value(card.rank)
+                                 for card in pair[1])
+        )[0]
 
     def choose_row(self, new_card, column):
         return max(
@@ -291,11 +288,11 @@ class PrudentAI(Player):
             key=lambda pair: self.expected_value(pair[1].rank)
         )[0]
 
-    def column_has_toak(self, column):
+    def column_toak(self, column):
         column_ranks = []
         for card in column:
             if not card.face_up: continue
-            if card.rank in column_ranks: return True
+            if card.rank in column_ranks: return card.rank
             column_ranks.append(card.rank)
 
     def has_two_in_column(self, rank):
@@ -310,7 +307,7 @@ class PrudentAI(Player):
     # TODO: Only call this at most once per get_input call
     def columns_without_toak(self):
         return [i for (i, column) in enumerate(self.hand)
-                if not self.column_has_toak(column)]
+                if not self.column_toak(column)]
 
     # def opponents_max_turned_over(self):
     #     return max(
@@ -369,8 +366,8 @@ class Game:
         self.draw_pile = []
         self.discard_pile = []
         self.players = [
-            Player(self, "human"),
-            PrudentAI(self, "computer")
+            AIPlayer(self, "computer 1"),
+            AIPlayer(self, "computer 2")
         ] if players is None else players
 
     def draw_hands(self):
