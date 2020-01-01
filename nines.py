@@ -83,29 +83,23 @@ class Game:
             for _ in range(2):
                 print("In which column (1-3) do you"
                       " want to turn over a card?")
-                while 1:
-                    column = input("> ")
+                def is_valid_column(s):
                     try:
-                        column = int(column)
+                        column = int(s)
                     except ValueError:
-                        pass
-                    else:
-                        if 1 <= column <= 3:
-                            break
-                column -= 1
+                        return False
+                    return 1 <= column <= 3
+                column = int(self.get_input(validator=is_valid_column)) - 1
                 print("In which row (1-3) do you want to"
                       " turn over a card?")
-                while 1:
-                    row = input("> ")
+                def is_valid_row(s):
                     try:
-                        row = int(row)
+                        row = int(s)
                     except ValueError:
-                        pass
-                    else:
-                        if 1 <= row <= 3:
-                            row -= 1
-                            if not player.hand[column][row].face_up:
-                                break
+                        return False
+                    return (1 <= row <= 3
+                            and not player.hand[column][row - 1].face_up)
+                row = int(self.get_input(validator=is_valid_row)) - 1
                 card = player.hand[column][row]
                 card.face_up = True
                 print(f"You turned over a {card.rank.upper()}.")
@@ -120,10 +114,9 @@ class Game:
             player.print_hand()
             print("Do you want to take a card from the DRAW pile"
                   " or the DISCARD pile?")
-            while 1:
-                action1 = input("> ").strip().lower()
-                if action1 in ["draw", "discard"]:
-                    break
+            action1 = self.get_input(
+                validator=lambda s: s.strip().lower() in ["draw", "discard"]
+            ).strip().lower()
             new_card = {"draw": self.draw_pile,
                         "discard": self.discard_pile}[action1].pop()
             new_card.face_up = True
@@ -170,6 +163,12 @@ class Game:
                 print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
             player.print_hand()
             print()
+
+    def get_input(self, prompt="> ", validator=lambda s: True):
+        while 1:
+            s = input(prompt)
+            if validator(s):
+                return s
 
 if __name__ == "__main__":
     game = Game()
