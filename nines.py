@@ -2,10 +2,10 @@ import random
 import itertools
 
 class Card:
-    def __init__(self, suit, rank, face_down=True):
+    def __init__(self, suit, rank, face_up=False):
         self.suit = suit
         self.rank = rank
-        self.face_down = face_down
+        self.face_up = face_up
 
     def __repr__(self):
         return f"{self.rank} of {self.suit}"
@@ -47,8 +47,12 @@ class Player:
         for i in range(3):
             lines = [[], [], []]
             for column in self.hand:
+                card = column[i]
                 lines[0].append("+--+")
-                lines[1].append(f"|{column[i].rank_abbrev().center(2)}|")
+                if card.face_up:
+                    lines[1].append(f"|{card.rank_abbrev().center(2)}|")
+                else:
+                    lines[1].append("|  |")
                 lines[2].append("+--+")
             for line in lines:
                 print(" ".join(line))
@@ -70,10 +74,48 @@ class Game:
         random.shuffle(self.draw_pile)
         self.discard_pile.append(self.draw_pile.pop())
         self.draw_hands()
+        for player in self.players:
+            s = f"{player.name}'s turn"
+            print(s)
+            print("=" * len(s))
+            input("Press ENTER to continue.")
+            player.print_hand()
+            for _ in range(2):
+                print("In which column (1-3) do you"
+                      " want to turn over a card?")
+                while 1:
+                    column = input("> ")
+                    try:
+                        column = int(column)
+                    except ValueError:
+                        pass
+                    else:
+                        if 1 <= column <= 3:
+                            break
+                column -= 1
+                print("In which row (1-3) do you want to"
+                      " turn over a card?")
+                while 1:
+                    row = input("> ")
+                    try:
+                        row = int(row)
+                    except ValueError:
+                        pass
+                    else:
+                        if 1 <= row <= 3:
+                            row -= 1
+                            if not player.hand[column][row].face_up:
+                                break
+                card = player.hand[column][row]
+                card.face_up = True
+                print(f"You turned over a {card.rank.upper()}.")
+                player.print_hand()
+                print()
         for player in itertools.cycle(self.players):
             s = f"{player.name}'s turn"
             print(s)
             print("=" * len(s))
+            input("Press ENTER to continue.")
             print(f"Discard pile: {self.discard_pile[-1].rank_abbrev()}")
             player.print_hand()
             print("Do you want to take a card from the DRAW pile"
@@ -84,6 +126,9 @@ class Game:
                     break
             new_card = {"draw": self.draw_pile,
                         "discard": self.discard_pile}[action].pop()
+            new_card.face_up = True
+            # TODO: If you take a card from the discard pile, you should
+            # only be allowed to keep it
             print(f"You have a {new_card.rank.upper()}.")
             print("Do you want to KEEP or DISCARD your"
                   f" {new_card.rank.upper()}?")
@@ -105,7 +150,7 @@ class Game:
                             break
                 column -= 1
                 print("In which row (1-3) do you want to"
-                      " place your {new_card.rank.upper()}?")
+                      f" place your {new_card.rank.upper()}?")
                 while 1:
                     row = input("> ")
                     try:
@@ -123,7 +168,6 @@ class Game:
                 self.discard_pile.append(new_card)
                 print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
             player.print_hand()
-            input("Press ENTER to continue.")
             print()
 
 if __name__ == "__main__":
