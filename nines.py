@@ -2,6 +2,18 @@ import random
 import itertools
 import statistics
 
+def maxima(iterable, key=None):
+    max_items = []
+    max_value = None
+    for item in iterable:
+        value = key(item) if key else item
+        if value > max_value:
+            max_items = [item]
+            max_value = value
+        elif value == max_value:
+            max_items.append(item)
+    return max_items
+
 class Card:
     def __init__(self, suit, rank, face_up=False):
         self._suit = suit
@@ -129,7 +141,7 @@ class Player:
                        validator=None):
         while 1:
             s = input(prompt)
-            if filter_fn is not None:
+            if filter_fn:
                 try:
                     s = filter_fn(s)
                 except ValueError:
@@ -174,9 +186,8 @@ class ImpatientAI(Player):
 
 class PrudentAI(Player):
     HAS_TWO_IN_COLUMN = 0
-    ALL_TOAK = 1
-    LOW_ENOUGH = 2
-    TOO_HIGH = 3
+    LOW_ENOUGH = 1
+    TOO_HIGH = 2
 
     def __init__(self, game, name):
         Player.__init__(self, game, name)
@@ -197,9 +208,6 @@ class PrudentAI(Player):
             if reason == self.HAS_TWO_IN_COLUMN:
                 print(f"-I already have two {rank_upper} cards in a"
                      f" column, so I'm going to take this {rank_upper}.")
-            elif reason == self.ALL_TOAK:
-                print("-I already have two of a kind in every column,"
-                      f" so I'm going to pass on that {rank_upper}.")
             elif reason == self.LOW_ENOUGH:
                 print(f"-This {rank_upper} is only worth"
                       f" {self.game.point_values[discard.rank]} points,"
@@ -216,9 +224,6 @@ class PrudentAI(Player):
             if reason == self.HAS_TWO_IN_COLUMN:
                 print(f"-I already have two {rank_upper} cards in a"
                       f" column, so I'm going to keep this {rank_upper}.")
-            elif reason == self.ALL_TOAK:
-                print("-I already have two of a kind in every column,"
-                      f" so I'm going to pass on this {rank_upper}.")
             elif reason == self.LOW_ENOUGH:
                 print(f"-This {rank_upper} is only worth"
                       f" {self.game.point_values[new_card.rank]} points,"
@@ -236,19 +241,24 @@ class PrudentAI(Player):
             return self.choose_row(new_card, column)
 
     def wants_card(self, new_card):
-        if self.has_two_in_column(new_card.rank):
-            return (True, self.HAS_TWO_IN_COLUMN)
-        columns_without_toak = self.columns_without_toak()
-        if not columns_without_toak: return (False, self.ALL_TOAK)
         # TODO: Take into account if the only card we want to replace
         # with this one is the last face-down card
-        # new_card_value = self.game.point_values[new_card.rank]
-        # for i in columns_without_toak:
-        #     for card in self.hand[i]:
-        #         if self.expected_value(card.rank) > new_card_value:
-        #             return (True, self.LOW_ENOUGH)
-        if self.game.point_values[new_card.rank] < self.mean_value:
-            return (True, self.LOW_ENOUGH)
+        if self.has_two_in_column(new_card.rank):
+            return (True, self.HAS_TWO_IN_COLUMN)
+        new_card_value = self.game.point_values[new_card.rank]
+        if new_card_value > self.mean_value:
+            # The draw pile will always be a better bet in this case
+            return (False, self.TOO_HIGH)
+        number_face_down = sum(
+            not card.face_up for column in self.hand for card in column
+        )
+        for column in self.hand:
+            column_ranks = [card.rank for card in column]
+            for card in column:
+                if number_face_down == 1 and not card.face_up: continue
+                if (column_ranks.count(card.rank) < 2
+                        and self.expected_value(card.rank) > new_card_value):
+                    return (True, self.LOW_ENOUGH)
         return (False, self.TOO_HIGH)
 
     # TODO: Prefer to put card in column where there is already a
