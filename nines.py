@@ -141,7 +141,7 @@ class ImpatientAI(Player):
     def __init__(self, game, name):
         Player.__init__(self, game, name)
         self.mean_value = statistics.mean(game.point_values.values())
-        
+
     def get_input(self, cue, *args):
         if cue == self.game.TURN_OVER_COLUMN:
             return 0
@@ -173,10 +173,15 @@ class ImpatientAI(Player):
 
 
 class PrudentAI(Player):
+    HAS_TWO_IN_COLUMN = 0
+    ALL_TOAK = 1
+    LOW_ENOUGH = 2
+    TOO_HIGH = 3
+
     def __init__(self, game, name):
         Player.__init__(self, game, name)
         self.mean_value = statistics.mean(game.point_values.values())
-        
+
     def get_input(self, cue, *args):
         if cue == self.game.TURN_OVER_COLUMN:
             return 0
@@ -187,61 +192,87 @@ class PrudentAI(Player):
                     return row
         elif cue == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
-            # TODO
-            if (self.game.point_values[discard.rank] < self.mean_value
-                and self.has_column_without_toak()):
-                return "discard"
-            elif self.has_two_in_column(discard.rank):
-                return "discard"
-            elif (self.is_min_in_column_without_toak(discard.rank)
-                  and self.opponents_max_turned_over() < 5):
-                return "discard"
-            return "draw"
+            wanted, reason = self.wants_card(discard)
+            rank_upper = discard.rank.upper()
+            if reason == self.HAS_TWO_IN_COLUMN:
+                print(f"-I already have two {rank_upper} cards in a"
+                     f" column, so I'm going to take this {rank_upper}.")
+            elif reason == self.ALL_TOAK:
+                print("-I already have two of a kind in every column,"
+                      f" so I'm going to pass on that {rank_upper}.")
+            elif reason == self.LOW_ENOUGH:
+                print(f"-This {rank_upper} is only worth"
+                      f" {self.game.point_values[discard.rank]} points,"
+                      " so I'm going to take it.")
+            elif reason == self.TOO_HIGH:
+                print(f"-That {rank_upper} is worth"
+                      f" {self.game.point_values[discard.rank]} points,"
+                      " which is too high for my taste.")
+            return "discard" if wanted else "draw"
         elif cue == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
-            # TODO: Change order of conditional blocks for consistency
-            # with placement code
-            if (self.game.point_values[new_card.rank] < self.mean_value
-                and self.has_column_without_toak()):
-                print(f"-This {new_card.rank.upper()} is only worth"
+            wanted, reason = self.wants_card(new_card)
+            rank_upper = new_card.rank.upper()
+            if reason == self.HAS_TWO_IN_COLUMN:
+                print(f"-I already have two {rank_upper} cards in a"
+                      f" column, so I'm going to keep this {rank_upper}.")
+            elif reason == self.ALL_TOAK:
+                print("-I already have two of a kind in every column,"
+                      f" so I'm going to pass on this {rank_upper}.")
+            elif reason == self.LOW_ENOUGH:
+                print(f"-This {rank_upper} is only worth"
                       f" {self.game.point_values[new_card.rank]} points,"
                       " so I'm going to keep it.")
-                return "keep"
-            elif self.has_two_in_column(new_card.rank):
-                print(f"-I've already got a couple of {new_card.rank.upper()}"
-                      " cards in one column, so I'm going to keep this one.")
-                return "keep"
-            elif (self.is_min_in_column_without_toak(new_card.rank)
-                  and self.opponents_max_turned_over() < 5):
-                print("-It doesn't look like anyone's in danger of going"
-                      " out anytime soon, so I'm going to take this"
-                      f" {new_card.rank.upper()} and hope a couple more"
-                      " come my way.")
-                return "keep"
-            print(f"-I don't want this {new_card.rank.upper()}.")
-            return "discard"
+            elif reason == self.TOO_HIGH:
+                print(f"-This {rank_upper} is worth"
+                      f" {self.game.point_values[new_card.rank]} points,"
+                      " which is too high for my taste.")
+            return "keep" if wanted else "discard"
         elif cue == self.game.PLACE_COLUMN:
             new_card = args[0]
-            columns_with_two = self.columns_with_two(new_card.rank)
-            if columns_with_two:
-                return self.max_column(columns_with_two)
-            columns_without_toak = self.columns_without_toak()
-            columns_where_min = self.columns_where_min_without_toak(
-                new_card.rank
-            )
-            if columns_where_min:
-                return self.max_column(columns_where_min)
-            return self.column_with_max_without_toak()
+            return self.choose_column(new_card)
         elif cue == self.game.PLACE_ROW:
             new_card, column = args
-            return random.randrange(3)
-            for (i, card) in enumerate(self.hand[column]):
-                if not card.face_up:
-                    return i
+            return self.choose_row(new_card, column)
 
-    def has_column_without_toak(self):
-        for column in self.hand:
-            if not self.column_has_toak(column): return True
+    def wants_card(self, new_card):
+        if self.has_two_in_column(new_card.rank):
+            return (True, self.HAS_TWO_IN_COLUMN)
+        columns_without_toak = self.columns_without_toak()
+        if not columns_without_toak: return (False, self.ALL_TOAK)
+        # TODO: Take into account if the only card we want to replace
+        # with this one is the last face-down card
+        # new_card_value = self.game.point_values[new_card.rank]
+        # for i in columns_without_toak:
+        #     for card in self.hand[i]:
+        #         if self.expected_value(card.rank) > new_card_value:
+        #             return (True, self.LOW_ENOUGH)
+        if self.game.point_values[new_card.rank] < self.mean_value:
+            return (True, self.LOW_ENOUGH)
+        return (False, self.TOO_HIGH)
+
+    # TODO: Prefer to put card in column where there is already a
+    # face-up card of the same rank or where all cards are face-down.
+
+    # TODO: If all rows have two of a kind, and more than one card
+    # remains face-down, consider taking a card even if it will not
+    # make three of a kind.
+
+    def choose_column(self, new_card):
+        columns_with_two = self.columns_with_two(new_card.rank)
+        if columns_with_two: return self.max_column(columns_with_two)
+        return max(
+            self.columns_without_toak(),
+            key=lambda i: max(self.expected_value(card.rank)
+                              for card in self.hand[i])
+        )
+
+    def choose_row(self, new_card, column):
+        return max(
+            ((i, card) for (i, card) in enumerate(self.hand[column])
+             if card.rank != new_card.rank),
+            key=lambda pair: self.expected_value(pair[1].rank)
+        )[0]
 
     def column_has_toak(self, column):
         column_ranks = []
@@ -259,24 +290,16 @@ class PrudentAI(Player):
                     if n == 2:
                         return True
 
-    def is_min_in_column_without_toak(self, rank):
-        for i in self.columns_without_toak():
-            column = self.hand[i]
-            if rank == min((card.rank for card in column),
-                           key=self.expected_value):
-                return True
-
     # TODO: Only call this at most once per get_input call
     def columns_without_toak(self):
         return [i for (i, column) in enumerate(self.hand)
                 if not self.column_has_toak(column)]
-            
 
-    def opponents_max_turned_over(self):
-        return max(
-            sum(card.face_up for column in player.hand for card in column)
-            for player in self.game.players if player is not self
-        )
+    # def opponents_max_turned_over(self):
+    #     return max(
+    #         sum(card.face_up for column in player.hand for card in column)
+    #         for player in self.game.players if player is not self
+    #     )
 
     def columns_with_two(self, rank):
         columns = []
@@ -289,34 +312,6 @@ class PrudentAI(Player):
                         columns.append(i)
                         break
         return columns
-
-    def columns_where_min_without_toak(self, rank):
-        columns = []
-        for i in self.columns_without_toak():
-            column = self.hand[i]
-            if rank == min((card.rank for card in column),
-                           key=self.expected_value):
-                columns.append(i)
-        return columns
-
-    def column_with_max_without_toak(self):
-        max_index = 0
-        max_value = 0
-        for i in self.columns_without_toak():
-            column = self.hand[i]
-            ooak_ranks = []
-            for card in column:
-                # depends on there not being more than two of a kind in
-                # a column
-                if card.rank in ooak_ranks:
-                    ooak_ranks.remove(card.rank)
-                else:
-                    ooak_ranks.append(card.rank)
-            column_max = max(map(self.expected_value, ooak_ranks))
-            if column_max > max_value:
-                max_index = i
-                max_value = column_max
-        return max_index
 
     def expected_value(self, rank):
         return (self.mean_value if rank is None
