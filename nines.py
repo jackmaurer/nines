@@ -1,6 +1,7 @@
 import random
 import itertools
 
+# TODO: Don't make rank publicly accessible unless face up
 class Card:
     def __init__(self, suit, rank, face_up=False):
         self.suit = suit
@@ -36,7 +37,8 @@ def make_deck():
     ]]
 
 class Player:
-    def __init__(self, name):
+    def __init__(self, game, name):
+        self.game = game
         self.name = name
         self.hand = None
 
@@ -76,9 +78,59 @@ class Player:
         return sum(point_values[card.rank] for column in self.hand
                    for card in column)
 
-    def get_input(self, prompt="> ",
-                  filter_fn=None,
-                  validator=None):
+    def get_input(self, cue, *args):
+        if cue == self.game.TURN_OVER_COLUMN:
+            print("In which column (1-3) do you"
+                  " want to turn over a card?")
+            return self.get_user_input(
+                filter_fn=lambda s: int(s) - 1,
+                validator=lambda x: 0 <= x <= 2
+            )
+        elif cue == self.game.TURN_OVER_ROW:
+            print("In which row (1-3) do you want to"
+                  " turn over a card?")
+            column = args[0]
+            return self.get_user_input(
+                filter_fn=lambda s: int(s) - 1,
+                validator=lambda x: (
+                    0 <= x <= 2 and not self.hand[column][x].face_up
+                )
+            )
+        elif cue == self.game.DRAW_OR_DISCARD:
+            print("Do you want to take a card from the DRAW pile"
+                  " or the DISCARD pile?")
+            return self.get_user_input(
+                filter_fn=lambda s: s.strip().lower(),
+                validator=lambda s: s in ["draw", "discard"]
+            )
+        elif cue == self.game.KEEP_OR_DISCARD:
+            new_card = args[0]
+            print("Do you want to KEEP or DISCARD your"
+                  f" {new_card.rank.upper()}?")
+            return self.get_user_input(
+                filter_fn=lambda s: s.strip().lower(),
+                validator=lambda s: s in ["keep", "discard"]
+            )
+        elif cue == self.game.PLACE_COLUMN:
+            new_card = args[0]
+            print(f"In which column (1-{len(self.hand)}) do you"
+                  f" want to place your {new_card.rank.upper()}?")
+            return self.get_user_input(
+                filter_fn=lambda s: int(s) - 1,
+                validator=lambda x: 0 <= x <= len(self.hand) - 1
+            )
+        elif cue == self.game.PLACE_ROW:
+            new_card = args[0]
+            print("In which row (1-3) do you want to"
+                  f" place your {new_card.rank.upper()}?")
+            return self.get_user_input(
+                filter_fn=lambda s: int(s) - 1,
+                validator=lambda x: 0 <= x <= 2
+            )
+
+    def get_user_input(self, prompt="> ",
+                       filter_fn=None,
+                       validator=None):
         while 1:
             s = input(prompt)
             if filter_fn is not None:
@@ -88,20 +140,27 @@ class Player:
                     continue
             if validator is None or validator(s): return s
 
-# Game needs to pass state cues to the player with each request for
-# input so that if it's a Player, it can print input instructions for
-# the user, and if it's an AIPlayer, it can generate its own input.
+
 class AIPlayer(Player):
-    def __init__(self, name):
-        Player.__init__(self, name)
-        
+    def __init__(self, game, name):
+        Player.__init__(self, game, name)
+
 
 class Game:
+    TURN_OVER_COLUMN = 0
+    TURN_OVER_ROW = 1
+    DRAW_OR_DISCARD = 2
+    KEEP_OR_DISCARD = 3
+    PLACE_COLUMN = 4
+    PLACE_ROW = 5
+
     def __init__(self, num_players=2):
         self.deck = sum((make_deck() for _ in range(2)), [])
         self.draw_pile = []
         self.discard_pile = []
-        self.players = [Player(f"player {i + 1}") for i in range(num_players)]
+        self.players = [
+            Player(self, f"player {i + 1}") for i in range(num_players)
+        ]
         self.out_player = None
 
     def draw_hands(self):
@@ -124,20 +183,8 @@ class Game:
             input("Press ENTER to continue.")
             player.print_hand()
             for _ in range(2):
-                print("In which column (1-3) do you"
-                      " want to turn over a card?")
-                column = player.get_input(
-                    filter_fn=lambda s: int(s) - 1,
-                    validator=lambda x: 0 <= x <= 2
-                )
-                print("In which row (1-3) do you want to"
-                      " turn over a card?")
-                row = player.get_input(
-                    filter_fn=lambda s: int(s) - 1,
-                    validator=lambda x: (
-                        0 <= x <= 2 and not player.hand[column][x].face_up
-                    )
-                )
+                column = player.get_input(self.TURN_OVER_COLUMN)
+                row = player.get_input(self.TURN_OVER_ROW, column)
                 card = player.hand[column][row]
                 card.face_up = True
                 print(f"You turned over a {card.rank.upper()}.")
@@ -152,38 +199,18 @@ class Game:
             input("Press ENTER to continue.")
             print(f"Discard pile: {self.discard_pile[-1].rank_abbrev()}")
             player.print_hand()
-            print("Do you want to take a card from the DRAW pile"
-                  " or the DISCARD pile?")
-            action1 = player.get_input(
-                filter_fn=lambda s: s.strip().lower(),
-                validator=lambda s: s in ["draw", "discard"]
-            )
+            action1 = player.get_input(self.DRAW_OR_DISCARD)
             new_card = {"draw": self.draw_pile,
                         "discard": self.discard_pile}[action1].pop()
             new_card.face_up = True
             print(f"You have a {new_card.rank.upper()}.")
             if action1 == "draw":
-                print("Do you want to KEEP or DISCARD your"
-                      f" {new_card.rank.upper()}?")
-                action2 = player.get_input(
-                    filter_fn=lambda s: s.strip().lower(),
-                    validator=lambda s: s in ["keep", "discard"]
-                )
+                action2 = player.get_input(self.KEEP_OR_DISCARD, new_card)
             else:
                 action2 = "keep"
             if action2 == "keep":
-                print(f"In which column (1-{len(player.hand)}) do you"
-                      f" want to place your {new_card.rank.upper()}?")
-                column = player.get_input(
-                    filter_fn=lambda s: int(s) - 1,
-                    validator=lambda x: 0 <= x <= 2
-                )
-                print("In which row (1-3) do you want to"
-                      f" place your {new_card.rank.upper()}?")
-                row = player.get_input(
-                    filter_fn=lambda s: int(s) - 1,
-                    validator=lambda x: 0 <= x <= 2
-                )
+                column = player.get_input(self.PLACE_COLUMN, new_card)
+                row = player.get_input(self.PLACE_ROW, new_card, column)
                 self.discard_pile.append(player.hand[column][row])
                 player.hand[column][row] = new_card
                 print(f"You discarded a {self.discard_pile[-1].rank.upper()}")
