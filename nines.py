@@ -1,15 +1,22 @@
 import random
 import itertools
 
-# TODO: Don't make rank publicly accessible unless face up
 class Card:
     def __init__(self, suit, rank, face_up=False):
-        self.suit = suit
-        self.rank = rank
+        self._suit = suit
+        self._rank = rank
         self.face_up = face_up
 
+    @property
+    def suit(self):
+        if self.face_up: return self._suit
+
+    @property
+    def rank(self):
+        if self.face_up: return self._rank
+
     def __repr__(self):
-        return f"{self.rank} of {self.suit}"
+        return f"{self.rank} of {self.suit}" if self.face_up else "?"
 
     def rank_abbrev(self):
         return {
@@ -129,9 +136,6 @@ class Player:
 
 
 class ImpatientAI(Player):
-    def __init__(self, game, name):
-        Player.__init__(self, game, name)
-
     def get_input(self, cue, *args):
         if cue == self.game.TURN_OVER_COLUMN:
             return 0
@@ -201,11 +205,16 @@ class Game:
                 [self.draw_pile.pop() for _ in range(3)] for _ in range(3)
             ]
 
+    def draw(self):
+        card = self.draw_pile.pop()
+        card.face_up = True
+        return card
+
     def run(self):
         # TODO: Empty hands at end of game?
         random.shuffle(self.deck)
         self.draw_pile = [card for card in self.deck]
-        self.discard_pile.append(self.draw_pile.pop())
+        self.discard_pile.append(self.draw())
         self.draw_hands()
         self.out_player = None
         for player in self.players:
@@ -242,7 +251,9 @@ class Game:
             if action2 == "keep":
                 column = player.get_input(self.PLACE_COLUMN, new_card)
                 row = player.get_input(self.PLACE_ROW, new_card, column)
-                self.discard_pile.append(player.hand[column][row])
+                old_card = player.hand[column][row]
+                old_card.face_up = True
+                self.discard_pile.append(old_card)
                 player.hand[column][row] = new_card
             else:
                 self.discard_pile.append(new_card)
