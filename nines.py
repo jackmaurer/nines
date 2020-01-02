@@ -201,23 +201,35 @@ class AIPlayer(Player):
     def wants_card(self, new_card, from_discard=True):
         number_face_down = self.number_face_down()
         columns_with_two = self.columns_with_two(new_card.rank)
-        if columns_with_two:
-            # TODO: Take into account whether another player has gone out
-            if number_face_down > 1 or any(
-                all(card.face_up for card in self.hand[i])
-                for i in columns_with_two
-            ):
-                return (True, self.HAS_TWO_IN_COLUMN)
         new_card_value = self.game.point_values[new_card.rank]
+        can_replace_face_down = (number_face_down > 1
+                                 or self.game.out_player is not None)
+        if columns_with_two:
+            if (can_replace_face_down
+                or any(all(card.face_up for card in self.hand[i])
+                       for i in columns_with_two)
+                or ((self.min_score() - 2 * new_card_value)
+                      # TODO: .min_opponent_score()
+                    < min(map(self.min_score, self.other_players())))):
+                return (True, self.HAS_TWO_IN_COLUMN)
         if from_discard and new_card_value > self.mean_value:
             # The draw pile will always be a better bet in this case
             return (False, self.TOO_HIGH)
         for column in self.hand:
             column_ranks = [card.rank for card in column]
+            can_play_column = (can_replace_face_down
+                               or all(card.face_up for card in column))
             for card in column:
-                if number_face_down == 1 and not card.face_up: continue
-                if ((not card.face_up or column_ranks.count(card.rank) < 2)
-                        and self.expected_value(card.rank) > new_card_value):
+                can_go_out = (
+                    can_play_column
+                    or ((self.min_score() + new_card_value)
+                        < min(map(self.min_score,
+                                  self.other_players())))
+                )
+                if (can_go_out
+                    and ((not card.face_up
+                          or column_ranks.count(card.rank) < 2))
+                    and self.expected_value(card.rank) > new_card_value):
                     return (True, self.LOW_ENOUGH)
         return (False, self.TOO_HIGH)
 
@@ -227,20 +239,28 @@ class AIPlayer(Player):
         # with the highest expected value.
         number_face_down = self.number_face_down()
         columns_with_two = self.columns_with_two(new_card.rank)
+        new_card_value = self.game.point_values[new_card.rank]
+        can_replace_face_down = (number_face_down > 1
+                                 or self.game.out_player is not None)
         if columns_with_two:
-            # TODO: Take into account whether another player has gone out
-            if number_face_down == 1:
-                columns = [i for i in columns_with_two
-                           if all(card.face_up for card in self.hand[i])]
-                if columns: return self.max_column(columns)
-            else:
+            if can_replace_face_down:
                 return self.max_column(columns_with_two)
+            columns = [i for i in columns_with_two
+                       if all(card.face_up for card in self.hand[i])]
+            if columns:
+                return self.max_column(columns)
+            # TODO: Maybe the following condition should be considered
+            # first. After all, if you can win by going out, there's
+            # no point in considering other possibilities.
+            # if ((self.min_score() - 2 * new_card_value)
+            #     < min(map(self.min_score, self.other_players()))):
+            return columns_with_two[0]
         # Next, make a list of columns that contain at least one card
         # whose expected value is higher than the value of new_card.
-        new_card_value = self.game.point_values[new_card.rank]
         columns = []
         for (i, column) in enumerate(self.hand):
             for card in column:
+                # TODO: What if it's safe to go out here?
                 if number_face_down == 1 and not card.face_up: continue
                 if self.expected_value(card.rank) > new_card_value:
                     columns.append((i, column))
@@ -275,9 +295,26 @@ class AIPlayer(Player):
                 (i, column) for (i, column) in columns
                 if self.column_toak(column) is None
             ] or columns
+        columns2 = []
+        for (i, column) in columns:
+            column_ranks = [card.rank for card in column]
+            can_play_column = (can_replace_face_down
+                               or all(card.face_up for card in column))
+            for card in column:
+                can_go_out = (
+                    can_play_column
+                    or ((self.min_score() + new_card_value)
+                        < min(map(self.min_score,
+                                  self.other_players())))
+                )
+                if (can_go_out
+                    and ((not card.face_up
+                          or column_ranks.count(card.rank) < 2))
+                    and self.expected_value(card.rank) > new_card_value):
+                    columns2.append((i, column))
         return min(
             maxima(
-                columns,
+                columns2,
                 key=lambda pair: max(self.expected_value(card.rank)
                                      for card in pair[1])
             ),
@@ -286,11 +323,18 @@ class AIPlayer(Player):
 
     def choose_row(self, new_card, column):
         number_face_down = self.number_face_down()
-        # TODO: .is_last_face_down(card)
+        new_card_value = self.game.point_values[new_card.rank]
+        # TODO: Only calculate min_score and min_opponent_score once in
+        # other methods, too
+        min_score = self.min_score()
+        min_opponent_score = min(map(self.min_score, self.other_players()))
         return max(
             ((i, card) for (i, card) in enumerate(self.hand[column])
-             if card.rank != new_card.rank and (card.face_up
-                                                or number_face_down > 1)),
+             if (card.rank != new_card.rank
+                 and (number_face_down > 1
+                      or self.game.out_player is not None
+                      or card.face_up
+                      or (min_score + new_card_value) < min_opponent_score))),
             key=lambda pair: self.expected_value(pair[1].rank)
         )[0]
 
@@ -313,7 +357,7 @@ class AIPlayer(Player):
     # def opponents_max_turned_over(self):
     #     return max(
     #         sum(card.face_up for column in player.hand for card in column)
-    #         for player in self.game.players if player is not self
+    #         for player in self.other_players()
     #     )
 
     def columns_with_two(self, rank):
@@ -341,6 +385,17 @@ class AIPlayer(Player):
         return sum(
             not card.face_up for column in self.hand for card in column
         )
+
+    def min_score(self, player=None):
+        # TODO: Account for possibility that a face-down card will
+        # complete three of a kind?
+        player = self if player is None else player
+        return sum(self.game.point_values[card.rank]
+                   for column in player.hand for card in column
+                   if card.face_up)
+
+    def other_players(self):
+        return (player for player in self.game.players if player is not self)
 
 
 class Game:
