@@ -84,18 +84,16 @@ class Player:
                    for card in column)
 
     def get_input(self, cue, *args):
-        if cue == self.game.TURN_OVER_COLUMN:
+        if cue == self.game.TURN_OVER:
             print("In which column (1-3) do you"
                   " want to turn over a card?")
-            return self.get_user_input(
+            column = self.get_user_input(
                 filter_fn=lambda s: int(s) - 1,
                 validator=lambda x: 0 <= x <= 2
             )
-        elif cue == self.game.TURN_OVER_ROW:
             print("In which row (1-3) do you want to"
                   " turn over a card?")
-            column = args[0]
-            return self.get_user_input(
+            return column, self.get_user_input(
                 filter_fn=lambda s: int(s) - 1,
                 validator=lambda x: (
                     0 <= x <= 2 and not self.hand[column][x].face_up
@@ -116,19 +114,24 @@ class Player:
                 filter_fn=lambda s: s.strip().lower(),
                 validator=lambda s: s in ["keep", "discard"]
             )
-        elif cue == self.game.PLACE_COLUMN:
+        elif cue == self.game.PLACE:
             new_card = args[0]
-            print(f"In which column (1-{len(self.hand)}) do you"
-                  f" want to place your {new_card.rank.upper()}?")
-            return self.get_user_input(
-                filter_fn=lambda s: int(s) - 1,
-                validator=lambda x: 0 <= x <= len(self.hand) - 1
-            )
-        elif cue == self.game.PLACE_ROW:
-            new_card = args[0]
+            if len(self.hand) > 1 or True:
+                # It doesn't make sense to ask which column when
+                # there's only one, but it always tripped me up when I
+                # was rushing through test runs and it didn't, because
+                # I would enter the column when it asked for the row.
+                print(f"In which column (1-{len(self.hand)}) do you"
+                      f" want to place your {new_card.rank.upper()}?")
+                column = self.get_user_input(
+                    filter_fn=lambda s: int(s) - 1,
+                    validator=lambda x: 0 <= x <= len(self.hand) - 1
+                )
+            else:
+                column = 0
             print("In which row (1-3) do you want to"
                   f" place your {new_card.rank.upper()}?")
-            return self.get_user_input(
+            return column, self.get_user_input(
                 filter_fn=lambda s: int(s) - 1,
                 validator=lambda x: 0 <= x <= 2
             )
@@ -155,12 +158,10 @@ class AIPlayer(Player):
         self.row = None
 
     def get_input(self, cue, *args):
-        if cue == self.game.TURN_OVER_COLUMN:
+        if cue == self.game.TURN_OVER:
             for column in range(3):
                 if not self.hand[column][0].face_up:
-                    return column
-        elif cue == self.game.TURN_OVER_ROW:
-            return 0
+                    return column, 0
         elif cue == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
             wanted, reason = self.wants_card(discard)
@@ -193,12 +194,10 @@ class AIPlayer(Player):
                       f" {self.game.point_values[new_card.rank]} points,"
                       " which is too high for my taste.")
             return "keep" if wanted else "discard"
-        elif cue == self.game.PLACE_COLUMN:
-            new_card = args[0]
-            return self.choose_column(new_card)
-        elif cue == self.game.PLACE_ROW:
-            new_card, column = args
-            return self.choose_row(new_card, column)
+        elif cue == self.game.PLACE:
+            position = self.column, self.row
+            self.column, self.row = None, None
+            return position
 
     def wants_card(self, new_card, from_discard=True):
         number_face_down = self.number_face_down()
@@ -220,9 +219,9 @@ class AIPlayer(Player):
                         self.row = i
                         break
                 assert self.row is not None
-                return (True, self.HAS_TWO_IN_COLUMN)
+                return True, self.HAS_TWO_IN_COLUMN
         if from_discard and new_card_value > self.mean_value:
-            return (False, self.TOO_HIGH)
+            return False, self.TOO_HIGH
         can_replace_face_down = (
             number_face_down > 1
             or self.game.out_player
@@ -243,7 +242,7 @@ class AIPlayer(Player):
                         and self.expected_value(card.rank) > new_card_value):
                     if i not in columns: columns.append((i, column))
                     positions.append((i, j))
-        if not positions: return (False, self.TOO_HIGH)
+        if not positions: return False, self.TOO_HIGH
         columns_with_same_rank = [
             (i, column) for (i, column) in columns if any(
                 card.rank == new_card.rank for card in column
@@ -277,17 +276,7 @@ class AIPlayer(Player):
                 card.face_up for card in self.hand[position[0]]
             )
         )
-        return (True, self.LOW_ENOUGH)
-
-    def choose_column(self, new_card):
-        column = self.column
-        self.column = None
-        return column
-
-    def choose_row(self, new_card, column):
-        row = self.row
-        self.row = None
-        return row
+        return True, self.LOW_ENOUGH
 
     def column_toak(self, column):
         column_ranks = []
@@ -338,8 +327,8 @@ class AIPlayer(Player):
 
 
 class Game:
-    (TURN_OVER_COLUMN, TURN_OVER_ROW, DRAW_OR_DISCARD,
-     KEEP_OR_DISCARD, PLACE_COLUMN, PLACE_ROW) = range(6)
+    (TURN_OVER, DRAW_OR_DISCARD,
+     KEEP_OR_DISCARD, PLACE) = range(4)
 
     point_values = {
         "ace":  1,
@@ -392,8 +381,7 @@ class Game:
             input("Press ENTER to continue.")
             player.print_hand()
             for _ in range(2):
-                column = player.get_input(self.TURN_OVER_COLUMN)
-                row = player.get_input(self.TURN_OVER_ROW, column)
+                column, row = player.get_input(self.TURN_OVER)
                 card = player.hand[column][row]
                 card.face_up = True
                 print(f"{player.name.upper()} turned over a"
@@ -421,10 +409,7 @@ class Game:
                       " from the discard pile")
                 action2 = "keep"
             if action2 == "keep":
-                column = 0 if len(player.hand) == 1 else player.get_input(
-                    self.PLACE_COLUMN, new_card
-                )
-                row = player.get_input(self.PLACE_ROW, new_card, column)
+                column, row = player.get_input(self.PLACE, new_card)
                 old_card = player.hand[column][row]
                 old_card.face_up = True
                 self.discard_pile.append(old_card)
