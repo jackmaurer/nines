@@ -83,8 +83,8 @@ class Player:
                    for column in self.hand
                    for card in column)
 
-    def get_input(self, cue, *args):
-        if cue == self.game.TURN_OVER:
+    def get_input(self, query, *args):
+        if query == self.game.TURN_OVER:
             print("In which column (1-3) do you"
                   " want to turn over a card?")
             column = self.get_user_input(
@@ -99,14 +99,14 @@ class Player:
                     0 <= x <= 2 and not self.hand[column][x].face_up
                 )
             )
-        elif cue == self.game.DRAW_OR_DISCARD:
+        elif query == self.game.DRAW_OR_DISCARD:
             print("Do you want to take a card from the DRAW pile"
                   " or the DISCARD pile?")
             return self.get_user_input(
                 filter_fn=lambda s: s.strip().lower(),
                 validator=lambda s: s in ["draw", "discard"]
             )
-        elif cue == self.game.KEEP_OR_DISCARD:
+        elif query == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
             print("Do you want to KEEP or DISCARD your"
                   f" {new_card.rank.upper()}?")
@@ -114,7 +114,7 @@ class Player:
                 filter_fn=lambda s: s.strip().lower(),
                 validator=lambda s: s in ["keep", "discard"]
             )
-        elif cue == self.game.PLACE:
+        elif query == self.game.PLACE:
             new_card = args[0]
             if len(self.hand) > 1 or True:
                 # It doesn't make sense to ask which column when
@@ -157,12 +157,12 @@ class AIPlayer(Player):
         self.column = None
         self.row = None
 
-    def get_input(self, cue, *args):
-        if cue == self.game.TURN_OVER:
+    def get_input(self, query, *args):
+        if query == self.game.TURN_OVER:
             for column in range(3):
                 if not self.hand[column][0].face_up:
                     return column, 0
-        elif cue == self.game.DRAW_OR_DISCARD:
+        elif query == self.game.DRAW_OR_DISCARD:
             discard = self.game.discard_pile[-1]
             wanted, reason = self.wants_card(discard)
             rank_upper = discard.rank.upper()
@@ -178,7 +178,7 @@ class AIPlayer(Player):
                       f" {self.game.point_values[discard.rank]} points,"
                       " which is too high for my taste.")
             return "discard" if wanted else "draw"
-        elif cue == self.game.KEEP_OR_DISCARD:
+        elif query == self.game.KEEP_OR_DISCARD:
             new_card = args[0]
             wanted, reason = self.wants_card(new_card, from_discard=False)
             rank_upper = new_card.rank.upper()
@@ -194,7 +194,7 @@ class AIPlayer(Player):
                       f" {self.game.point_values[new_card.rank]} points,"
                       " which is too high for my taste.")
             return "keep" if wanted else "discard"
-        elif cue == self.game.PLACE:
+        elif query == self.game.PLACE:
             position = self.column, self.row
             self.column, self.row = None, None
             return position
