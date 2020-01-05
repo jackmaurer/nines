@@ -204,6 +204,13 @@ class AIPlayer(Player):
         new_card_value = self.game.point_values[new_card.rank]
         min_score = self.min_score()
         min_opponent_score = self.min_opponent_score()
+        if (number_face_down == 1
+                and (min_score + new_card_value) < min_opponent_score):
+            for (i, column) in enumerate(self.hand):
+                for (j, card) in enumerate(column):
+                    if not card.face_up:
+                        self.column, self.row = i, j
+                        return True, self.LOW_ENOUGH
         columns_with_two = self.columns_with_two(new_card.rank)
         if columns_with_two:
             if (number_face_down > 1
@@ -345,8 +352,7 @@ class Game:
         self.discard_pile = []
         self.players = [
             Player(self, "human"),
-            AIPlayer(self, "computer 1"),
-            AIPlayer(self, "computer 2")
+            AIPlayer(self, "computer")
         ] if players is None else players
 
     def draw_hands(self):
