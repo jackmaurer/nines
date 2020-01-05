@@ -227,13 +227,6 @@ class AIPlayer(Player):
             or self.game.out_player
             or (min_score + new_card_value < min_opponent_score)
         )
-        columns = [
-            (i, column) for (i, column) in enumerate(self.hand) if any(
-                (card.face_up or can_replace_face_down)
-                and self.expected_value(card.rank) > new_card_value
-                for card in column
-            )
-        ]
         columns = []
         positions = []
         for (i, column) in enumerate(self.hand):
